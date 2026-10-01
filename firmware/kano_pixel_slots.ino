@@ -1,5 +1,5 @@
 // Kano Pixel Kit - Online Slots firmware
-//   Selection 1: WiFi stock ticker (Stooq, no API key)
+//   Selection 1: WiFi stock ticker (Yahoo Finance, no API key)
 //   Selection 2/3: projects fetched live from GitHub over WiFi
 //                  (see https://github.com/f2mjzw54fv-prog/kano-pixel-projects)
 // Joystick left/right = switch selection. Dial = brightness (all slots).
@@ -27,11 +27,9 @@ const char* SLOT_URLS[2] = {
 };
 const unsigned long SLOT_REFRESH_MS = 5 * 60 * 1000;  // re-fetch online slots every 5 min
 
-// Ticker config (selection 1)
-const char* STOOQ_SYMBOLS =
-  "aapl.us,tsla.us,meta.us,goog.us,unh.us,o.us,"
-  "schd.us,fdvv.us,gld.us,ibit.us,gbtc.us,rivn.us,"
-  "vrtx.us,cbrs.us,spcx.us";
+// Ticker config (selection 1) — Yahoo Finance spark API (single batched request)
+const char* YAHOO_SYMBOLS =
+  "AAPL,TSLA,META,GOOG,UNH,O,SCHD,FDVV,GLD,IBIT,GBTC,RIVN,VRTX,CBRS,SPCX";
 const unsigned long FETCH_INTERVAL_MS = 60000;
 const int SCROLL_DELAY_MS = 35;
 
@@ -286,42 +284,40 @@ bool fetchQuotes() {
   client.setInsecure();
   HTTPClient http;
   http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
-  String url = "https://stooq.com/q/l/?s=" + String(STOOQ_SYMBOLS) +
-               "&f=sd2t2ohlcv&h&e=csv";
+  http.setUserAgent("Mozilla/5.0");
+  String url = "https://query1.finance.yahoo.com/v7/finance/spark?symbols=" +
+               String(YAHOO_SYMBOLS) + "&interval=1d&range=5d";
   http.begin(client, url);
   if (http.GET() != 200) { http.end(); return false; }
   String payload = http.getString();
   http.end();
 
-  int seg = 0, pos = 0;
-  bool firstLine = true;
-  while (pos < (int)payload.length() && seg < 20) {
-    int nl = payload.indexOf('\n', pos);
-    String line = (nl < 0) ? payload.substring(pos) : payload.substring(pos, nl);
-    pos = (nl < 0) ? payload.length() : nl + 1;
-    line.trim();
-    if (line.length() == 0) continue;
-    if (firstLine) { firstLine = false; continue; }
+  JsonDocument doc;
+  if (deserializeJson(doc, payload)) return false;
+  JsonArray results = doc["spark"]["result"];
+  if (results.isNull() || results.size() == 0) return false;
 
-    int f[8]; f[0] = 0;
-    int fi = 1;
-    for (unsigned int i = 0; i < line.length() && fi < 8; i++)
-      if (line[i] == ',') f[fi++] = i + 1;
-    if (fi < 8) continue;
-    String sym    = line.substring(f[0], f[1] - 1);
-    String openS  = line.substring(f[3], f[4] - 1);
-    String closeS = line.substring(f[6], f[7] - 1);
-    if (closeS == "N/A" || openS == "N/A") continue;
-    float open = openS.toFloat(), close = closeS.toFloat();
-    if (open <= 0) continue;
-    float chg = (close - open) / open * 100.0;
-    char buf[40];
-    snprintf(buf, sizeof(buf), "%s %.2f %c%.2f%%    ",
-             displaySym(sym).c_str(), close, chg >= 0 ? '+' : '-',
-             abs(chg));
-    segs[seg].text = String(buf);
-    segs[seg].color = (chg >= 0) ? CRGB::Green : CRGB::Red;
-    seg++;
+  // keep the watchlist order regardless of Yahoo's response order
+  const char* order[] = {"AAPL","TSLA","META","GOOG","UNH","O","SCHD","FDVV",
+                         "GLD","IBIT","GBTC","RIVN","VRTX","CBRS","SPCX"};
+  int seg = 0;
+  for (unsigned int oi = 0; oi < sizeof(order)/sizeof(order[0]) && seg < 20; oi++) {
+    for (JsonObject r : results) {
+      const char* sym = r["symbol"];
+      if (!sym || strcmp(sym, order[oi]) != 0) continue;
+      JsonObject meta = r["response"][0]["meta"];
+      if (meta.isNull()) break;
+      float price = meta["regularMarketPrice"] | 0.0f;
+      float chg   = meta["regularMarketChangePercent"] | 0.0f;
+      if (price <= 0) break;
+      char buf[40];
+      snprintf(buf, sizeof(buf), "%s %.2f %c%.2f%%    ",
+               order[oi], price, chg >= 0 ? '+' : '-', fabsf(chg));
+      segs[seg].text = String(buf);
+      segs[seg].color = (chg >= 0) ? CRGB::Green : CRGB::Red;
+      seg++;
+      break;
+    }
   }
   if (seg == 0) return false;
   nSegs = seg;
