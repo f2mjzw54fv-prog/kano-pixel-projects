@@ -1,11 +1,12 @@
 # kano-pixel-projects
 
 Online project slots for the Kano Pixel Kit. The Kano's firmware keeps
-**selection 1** as the built-in stock ticker; **selections 2 and 3** are
+**selection 1** as the built-in stock ticker; **selections 2-4** are
 fetched live from this repo over WiFi:
 
 - `slots/slot2.json` → Kano selection 2
 - `slots/slot3.json` → Kano selection 3
+- `slots/slot4.json` → Kano selection 4
 
 To put something new on the Kano, just ask Muse, e.g.
 "make slot 2 a spooky Halloween pumpkin" or
