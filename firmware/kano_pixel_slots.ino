@@ -1,13 +1,13 @@
 // Kano Pixel Kit - Online Slots firmware
 //   Selection 1: WiFi stock ticker (Yahoo Finance, no API key)
-//   Selection 2/3: projects fetched live from GitHub over WiFi
+//   Selections 2-4: projects fetched live from GitHub over WiFi
 //                  (see https://github.com/f2mjzw54fv-prog/kano-pixel-projects)
 // Joystick left/right = switch selection. Dial = brightness (all slots).
 //
 // Setup:
 //   1. Set WIFI_SSID / WIFI_PASS below
 //   2. Arduino IDE: ESP32 board package + FastLED + ArduinoJson libraries
-//   3. Flash. Use the joystick to flip between the 3 selections.
+//   3. Flash. Use the joystick to flip between the 4 selections.
 
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
@@ -20,10 +20,11 @@
 const char* WIFI_SSID = "YOUR_WIFI_SSID";
 const char* WIFI_PASS = "YOUR_WIFI_PASSWORD";
 
-// Raw URLs of the two online slot files
-const char* SLOT_URLS[2] = {
+// Raw URLs of the three online slot files
+const char* SLOT_URLS[3] = {
   "https://raw.githubusercontent.com/f2mjzw54fv-prog/kano-pixel-projects/main/slots/slot2.json",
   "https://raw.githubusercontent.com/f2mjzw54fv-prog/kano-pixel-projects/main/slots/slot3.json",
+  "https://raw.githubusercontent.com/f2mjzw54fv-prog/kano-pixel-projects/main/slots/slot4.json",
 };
 const unsigned long SLOT_REFRESH_MS = 5 * 60 * 1000;  // re-fetch online slots every 5 min
 
@@ -141,7 +142,7 @@ bool pressed(uint8_t pin) {
   return false;
 }
 
-// ---------------- ONLINE PROJECT (selections 2 & 3) ----------------
+// ---------------- ONLINE PROJECT (selections 2-4) ----------------
 struct Project {
   String name;
   String type = "scroll";   // scroll | static | effect | frames
@@ -159,7 +160,7 @@ struct Project {
 Project proj;
 
 bool loadProject(int slotIdx) {
-  // slotIdx 0 -> selection 2, 1 -> selection 3
+  // slotIdx 0 -> selection 2, 1 -> selection 3, 2 -> selection 4
   proj = Project();
   WiFiClientSecure client;
   client.setInsecure();
@@ -355,7 +356,7 @@ void runTicker(unsigned long now) {
 }
 
 // ---------------- MAIN ----------------
-int slot = 1;  // 1 = ticker, 2/3 = online projects
+int slot = 1;  // 1 = ticker, 2-4 = online projects
 unsigned long slotLoadedAt = 0;
 bool slotLoadFailed = false;
 
@@ -416,8 +417,8 @@ void loop() {
   static unsigned long lastWifiTry = 0;
 
   // Joystick left/right switches selection
-  if (pressed(JOY_RIGHT)) { selectSlot(slot % 3 + 1); return; }
-  if (pressed(JOY_LEFT))  { selectSlot((slot + 1) % 3 + 1); return; }
+  if (pressed(JOY_RIGHT)) { selectSlot(slot % 4 + 1); return; }
+  if (pressed(JOY_LEFT))  { selectSlot((slot + 2) % 4 + 1); return; }
 
   // Keep WiFi alive
   if (WiFi.status() != WL_CONNECTED) {
@@ -443,7 +444,7 @@ void loop() {
     return;
   }
 
-  // Selections 2/3: online project
+  // Selections 2-4: online project
   if (slotLoadFailed || !proj.valid) {
     fill_solid(leds, NUM_LEDS, CRGB::Black);
     drawStr(0, 0, "LOAD FAIL", CRGB::Red);
